@@ -1,0 +1,78 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "$id": "https://raw.githubusercontent.com/nfvir/nfvir/master/nextflow_schema.json",
+    "title": "nfvir pipeline parameters",
+    "description": "A simple viromics pipeline to mine viral genomes in a metagenome",
+    "type": "object",
+    "definitions": {
+        "input_output_options": {
+            "title": "Input/output options",
+            "type": "object",
+            "required": ["assembly", "reads", "genomad_db", "checkv_db"],
+            "properties": {
+                "assembly": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to the co-assembly FASTA file",
+                    "help_text": "The metagenomic assembly in FASTA format (can be gzipped)"
+                },
+                "reads": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to the CSV file containing sample reads",
+                    "help_text": "CSV file with columns: sampleID, reads_R1, reads_R2"
+                },
+                "genomad_db": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Path to the geNomad database directory",
+                    "help_text": "Directory containing the geNomad database (must contain genomad_mini_db.index)"
+                },
+                "checkv_db": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "Path to the CheckV database directory",
+                    "help_text": "Directory containing the CheckV database"
+                },
+                "outdir": {
+                    "type": "string",
+                    "format": "directory-path",
+                    "description": "The output directory where the results will be saved",
+                    "default": "./results"
+                }
+            }
+        },
+        "process_options": {
+            "title": "Process options",
+            "type": "object",
+            "properties": {
+                "max_cpus": {
+                    "type": "integer",
+                    "description": "Maximum number of CPUs that can be requested for any single job",
+                    "default": 16,
+                    "minimum": 1
+                },
+                "max_memory": {
+                    "type": "string",
+                    "description": "Maximum amount of memory that can be requested for any single job",
+                    "default": "128.GB",
+                    "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$"
+                },
+                "max_time": {
+                    "type": "string",
+                    "description": "Maximum amount of time that can be requested for any single job",
+                    "default": "240.h",
+                    "pattern": "^(\\d+\\.?\\s*(s|m|h|d|day)\\s*)+$"
+                }
+            }
+        }
+    },
+    "allOf": [
+        {
+            "$ref": "#/definitions/input_output_options"
+        },
+        {
+            "$ref": "#/definitions/process_options"
+        }
+    ]
+}
