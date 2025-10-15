@@ -1,6 +1,8 @@
 # nfvir
 
-A simple viromics pipeline to mine viral genomes in a metagenome.
+![Nextflow Virome Pipeline Logo](ebame-vir.svg)
+
+A simple viromics pipeline to mine viral genomes in a metagenome based on the [EBAME Viromics workshop](https://corebio.info/ebame-viromics/).
 
 ## Overview
 

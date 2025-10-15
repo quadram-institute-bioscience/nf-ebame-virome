@@ -11,7 +11,8 @@ process EXTRACT_REPSEQ {
     tuple val(meta), path(virus_fasta), path(representative_ids)
 
     output:
-    tuple val(meta), path("vOTU_representatives.fna"), emit: representatives
+    tuple val(meta), path("vOTUs.fa"), emit: representatives
+    tuple val(meta), path("vOTU_names.tsv"), emit: table
     path "versions.yml"                               , emit: versions
 
     when:
@@ -21,17 +22,16 @@ process EXTRACT_REPSEQ {
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    # Decompress input if needed
-    if [[ ${virus_fasta} == *.gz ]]; then
-        gunzip -c ${virus_fasta} > input_viruses.fna
-        INPUT_FILE="input_viruses.fna"
-    else
-        INPUT_FILE="${virus_fasta}"
-    fi
+    # Extract representative sequences using seqfu list
+    # seqfu can read compressed files directly
+    seqfu list ${representative_ids} ${virus_fasta} > vOTUs_representatives.fa
+    seqfu cat --anvio vOTUs_representatives.fa > vOTUs.fa
+    
+    seqfu cat --list vOTUs_representatives.fa > original_names.txt
+    seqfu cat --list vOTUs.fa                 > new_names.txt
 
-    # Extract representative sequences using seqfu
-    seqfu grep -f ${representative_ids} \$INPUT_FILE > vOTU_representatives.fna
-
+    paste original_names.txt new_names.txt > vOTU_names.tsv
+    
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         seqfu: \$(seqfu version 2>&1 | sed 's/seqfu //')
@@ -42,7 +42,7 @@ process EXTRACT_REPSEQ {
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    touch vOTU_representatives.fna
+    touch vOTUs_representatives.fa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
