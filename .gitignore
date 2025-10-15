@@ -1,0 +1,32 @@
+# Nextflow outputs
+results/
+work/
+.nextflow*
+*.html
+*.log
+
+# Test outputs
+test_results/
+
+# Environment files
+.conda/
+.singularity/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+checkv-db-v1.5.tar.gz
+genomad_db.tar.gz
+data/
+db/
+modules-scrapfiles/
+PROJECT.md
+results/
+work/
+zhead.sh
