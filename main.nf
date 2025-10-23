@@ -80,6 +80,7 @@ include { CHECKV_ENDTOEND  } from './modules/checkv'
 include { DEREPLICATE      } from './modules/dereplicate'
 include { EXTRACT_REPSEQ   } from './modules/repseq'
 include { MINIMAP2_ALIGN   } from './modules/minimap'
+include { COVERM_CONTIG    } from './modules/coverm'
 
 /*
 ========================================================================================
@@ -150,6 +151,16 @@ workflow {
         'bai', // bam_index_extension
         false, // cigar_paf_format
         false  // cigar_bam
+    )
+
+    // 8. Calculate coverage metrics across all samples
+    // Collect all BAM files and their indices
+    bam_files_ch = MINIMAP2_ALIGN.out.bam.map { meta, bam -> bam }.collect()
+    bai_files_ch = MINIMAP2_ALIGN.out.index.map { meta, bai -> bai }.collect()
+
+    COVERM_CONTIG(
+        bam_files_ch,
+        bai_files_ch
     )
 }
 
