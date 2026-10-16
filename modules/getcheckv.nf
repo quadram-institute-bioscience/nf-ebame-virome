@@ -3,6 +3,7 @@ process DOWNLOAD_CHECKV {
 
     publishDir "${params.outdir}", mode: 'copy'
 
+    conda "bioconda::checkv=1.0.3"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/checkv:1.0.3--pyhdfd78af_0':
         'biocontainers/checkv:1.0.3--pyhdfd78af_0' }"

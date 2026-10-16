@@ -12,10 +12,11 @@ This Nextflow pipeline processes metagenomic assemblies to identify, quality-che
 2. **Quality assessment** - Runs CheckV to evaluate viral sequence quality
 3. **Dereplication** - Clusters viral sequences at 95% ANI with 85% alignment fraction
 4. **Read mapping** - Maps reads to dereplicated vOTUs using minimap2
+5. **Coverage** - Computes per-vOTU coverage/abundance across all samples with CoverM
 
 ## Requirements
 
-- Nextflow >= 23.04.0
+- Nextflow >= 25.10.0
 - Docker, Singularity, or Conda
 - geNomad database
 - CheckV database
@@ -27,12 +28,18 @@ This Nextflow pipeline processes metagenomic assemblies to identify, quality-che
 git clone https://github.com/nfvir/nfvir.git
 cd nfvir
 
-# Download geNomad database (if not already available)
-genomad download-database .
-
-# Download CheckV database (if not already available)
-checkv download-database .
 ```
+
+### Databases
+
+The databases can be downloaded with the bundled helper pipeline
+(they are written to `--outdir`, as `genomad_db/` and `checkv-db-v*/`):
+
+```bash
+nextflow run download.nf --outdir db -profile docker
+```
+
+or manually with `genomad download-database .` and `checkv download_database .`.
 
 ## Input
 
@@ -79,8 +86,11 @@ nextflow run main.nf --assembly <assembly> --reads <reads.csv> \
 
 ### Run with test data
 
+The `test` profile expects a small dataset in `data/` (`human_gut_assembly.fa.gz`
+and `reads.csv`). This data is **not** shipped in the repository (`data/` is git-ignored),
+so place it there first:
+
 ```bash
-# Make sure you have the databases downloaded first
 nextflow run main.nf \
   --genomad_db /path/to/genomad_db \
   --checkv_db /path/to/checkv_db \
@@ -103,8 +113,8 @@ nextflow run main.nf \
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--outdir` | `./results` | Output directory |
-| `--max_cpus` | `16` | Maximum CPUs per job |
-| `--max_memory` | `128.GB` | Maximum memory per job |
+| `--max_cpus` | `8` | Maximum CPUs per job |
+| `--max_memory` | `32.GB` | Maximum memory per job |
 | `--max_time` | `240.h` | Maximum time per job |
 
 ## Output
@@ -117,17 +127,20 @@ results/
 ├── checkv/               # CheckV outputs (quality assessment)
 ├── dereplicated-votus/   # Dereplicated viral sequences
 ├── alignments/           # BAM files from read mapping
+├── coverage/             # CoverM coverage table (vOTUs x samples)
 └── pipeline_info/        # Execution reports and logs
 ```
 
 ### Key output files
 
-- `genomad/*_virus.fna.gz` - Identified viral sequences
-- `genomad/*_virus_summary.tsv` - Summary of viral sequences
-- `checkv/quality_summary.tsv` - Quality metrics for viral sequences
-- `dereplicated-votus/vOTU_representatives.fna` - Dereplicated viral OTUs
-- `dereplicated-votus/vOTU_clusters.tsv` - Clustering information
-- `alignments/*.bam` - Sorted BAM files for each sample
+- `genomad/genomad-out/*_summary/*_virus.fna.gz` - Identified viral sequences
+- `genomad/genomad-out/*_summary/*_virus_summary.tsv` - Summary of viral sequences
+- `checkv/checkv-out/quality_summary.tsv` - Quality metrics for viral sequences
+- `dereplicated-votus/vOTUs.fa` - Dereplicated viral OTUs (renamed `c_000000000001`, ...)
+- `dereplicated-votus/vOTU_names.tsv` - Original contig name -> vOTU name
+- `dereplicated-votus/vOTU_clusters.tsv` - Clustering information (representative, members)
+- `alignments/*.bam` - Sorted, indexed BAM files for each sample
+- `coverage/coverage_table.tsv` - Mean coverage, covered fraction, RPKM and TPM per vOTU and sample
 
 ## Pipeline structure
 
@@ -140,18 +153,13 @@ nfvir/
 │   ├── genomad.nf          # Viral identification
 │   ├── checkv.nf           # Quality assessment
 │   ├── dereplicate.nf      # Viral dereplication
-│   └── minimap.nf          # Read mapping
+│   ├── repseq.nf           # Representative sequence extraction
+│   ├── minimap.nf          # Read mapping
+│   └── coverm.nf           # Coverage calculation
+├── download.nf              # Database download pipeline
 ├── bin/                     # Helper scripts (exposed to all processes)
 └── data/                    # Test data
 ```
-
-## Test dataset
-
-The `data/` directory contains a small test dataset:
-
-- `human_gut_assembly.fa.gz` - A small metagenomic assembly
-- `reads/` - Three paired-end read samples
-- `reads.csv` - Sample sheet for the test reads
 
 ## Troubleshooting
 
@@ -159,7 +167,7 @@ The `data/` directory contains a small test dataset:
 
 The pipeline validates that:
 - geNomad database contains `genomad_mini_db.index`
-- CheckV database directory exists
+- CheckV database directory exists and contains `genome_db/`
 
 Ensure these files are present in your database directories.
 

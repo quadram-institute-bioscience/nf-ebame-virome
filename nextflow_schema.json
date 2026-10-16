@@ -49,13 +49,13 @@
                 "max_cpus": {
                     "type": "integer",
                     "description": "Maximum number of CPUs that can be requested for any single job",
-                    "default": 16,
+                    "default": 8,
                     "minimum": 1
                 },
                 "max_memory": {
                     "type": "string",
                     "description": "Maximum amount of memory that can be requested for any single job",
-                    "default": "128.GB",
+                    "default": "32.GB",
                     "pattern": "^\\d+(\\.\\d+)?\\.?\\s*(K|M|G|T)?B$"
                 },
                 "max_time": {

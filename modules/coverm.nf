@@ -2,7 +2,7 @@ process COVERM_CONTIG {
     tag "coverage_table"
     label 'process_medium'
 
-    conda "${moduleDir}/environment.yml"
+    conda "bioconda::coverm=0.7.0"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/coverm:0.7.0--hcb7b614_4' :
         'biocontainers/coverm:0.7.0--hcb7b614_4' }"

@@ -2,7 +2,7 @@ process GENOMAD_ENDTOEND {
     tag "$meta.id"
     label 'process_high'
 
-    conda "${moduleDir}/environment.yml"
+    conda "bioconda::genomad=1.9.0"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/genomad:1.9.0--pyhdfd78af_1':
         'biocontainers/genomad:1.9.0--pyhdfd78af_1' }"

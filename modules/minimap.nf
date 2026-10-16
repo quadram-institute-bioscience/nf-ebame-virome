@@ -2,7 +2,7 @@ process MINIMAP2_ALIGN {
     tag "$meta.id"
     label 'process_high'
 
-    conda "${moduleDir}/environment.yml"
+    conda "bioconda::minimap2=2.29 bioconda::samtools=1.21"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/66/66dc96eff11ab80dfd5c044e9b3425f52d818847b9c074794cf0c02bfa781661/data' :
         'community.wave.seqera.io/library/minimap2_samtools:33bb43c18d22e29c' }"

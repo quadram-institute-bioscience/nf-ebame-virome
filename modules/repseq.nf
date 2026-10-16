@@ -2,7 +2,7 @@ process EXTRACT_REPSEQ {
     tag "$meta.id"
     label 'process_low'
 
-    conda "${moduleDir}/environment.yml"
+    conda "bioconda::seqfu=1.22.3"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/seqfu:1.22.3--hfd12232_2':
         'biocontainers/seqfu:1.22.3--hfd12232_2' }"
@@ -42,7 +42,8 @@ process EXTRACT_REPSEQ {
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    touch vOTUs_representatives.fa
+    touch vOTUs.fa
+    touch vOTU_names.tsv
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
