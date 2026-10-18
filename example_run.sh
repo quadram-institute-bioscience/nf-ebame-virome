@@ -6,7 +6,7 @@
 
 CHECKV_DB=${CHECKV_DB:-db/checkv-db-v1.5}
 GENOMAD_DB=${GENOMAD_DB:-db/genomad_db}
-ASSEMBLY=${ASSEMBLY:-data/human_gut_assembly.fa.gz}
+ASSEMBLY=${ASSEMBLY:-data/mini.fa}
 READS=${READS:-data/reads.csv}
 
 nextflow run main.nf -resume \
