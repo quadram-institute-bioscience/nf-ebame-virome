@@ -69,6 +69,25 @@
                     "description": "Maximum amount of time that can be requested for any single job",
                     "default": "240.h",
                     "pattern": "^(\\d+\\.?\\s*(s|m|h|d|day)\\s*)+$"
+                },
+                "genomad_cleanup": {
+                    "type": "boolean",
+                    "description": "Delete geNomad intermediate files after the run",
+                    "help_text": "Passes --cleanup to geNomad end-to-end. Intermediate MMseqs2 databases and other temporary files are not needed by the pipeline and can consume a lot of disk space.",
+                    "default": true
+                },
+                "checkv_min_quality": {
+                    "type": "string",
+                    "description": "Minimum CheckV quality tier retained for dereplication",
+                    "help_text": "Sequences below this tier are excluded before clustering. Use 'all' (default) to keep every geNomad virus, including sequences with no CheckV completeness estimate ('Not-determined').",
+                    "default": "all",
+                    "enum": ["all", "low", "medium", "high", "complete"]
+                },
+                "minimap": {
+                    "type": "boolean",
+                    "description": "Use minimap2 instead of BWA for read mapping",
+                    "help_text": "BWA is used by default. Set this flag to map reads with minimap2 instead.",
+                    "default": false
                 }
             }
         }

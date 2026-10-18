@@ -14,10 +14,12 @@
 
 include { GENOMAD_ENDTOEND } from './modules/genomad'
 include { CHECKV_ENDTOEND  } from './modules/checkv'
-include { DEREPLICATE      } from './modules/dereplicate'
+include { VOTUDEREP       } from './modules/votuderep'
 include { EXTRACT_REPSEQ   } from './modules/repseq'
+include { BWA_INDEX        } from './modules/bwa'
+include { BWA_MEM          } from './modules/bwa'
 include { MINIMAP2_ALIGN   } from './modules/minimap'
-include { COVERM_CONTIG    } from './modules/coverm'
+include { BAMCOUNTREFS     } from './modules/bamcountrefs'
 
 /*
 ========================================================================================
@@ -28,6 +30,57 @@ include { COVERM_CONTIG    } from './modules/coverm'
 workflow {
 
     main:
+
+    // Print help and exit when --help is requested
+    if (params.help?.toString() == 'true') {
+        log.info """\
+            ======================================================
+            nfvir - A simple viromics pipeline to mine viral genomes
+            ======================================================
+
+            Usage:
+              nextflow run main.nf --assembly <assembly.fa[.gz]> \\
+                                   --reads <reads.csv> \\
+                                   --genomad_db <genomad_db> \\
+                                   --checkv_db <checkv_db> \\
+                                   [options] \\
+                                   -profile <docker|singularity|podman|conda|standard>
+
+            Required arguments:
+              --assembly   PATH    Co-assembly FASTA file (optionally gzipped)
+              --reads      PATH    CSV file with columns: sampleID, reads_R1, reads_R2
+              --genomad_db PATH    geNomad database directory
+              --checkv_db  PATH    CheckV database directory
+
+            Optional arguments:
+              --outdir                             PATH    Output directory (default: ./results)
+              --checkv_min_quality                 STR     Minimum CheckV tier kept for
+                                                           dereplication: all, low, medium,
+                                                           high, complete (default: all)
+              --minimap                                    Use minimap2 instead of BWA for read mapping
+              --genomad_cleanup                    BOOL    Delete geNomad intermediate files
+                                                           (default: true)
+              --max_cpus                           INT     Maximum CPUs per job (default: 8)
+              --max_memory                         STR     Maximum memory per job (default: 32.GB)
+              --max_time                           STR     Maximum time per job (default: 240.h)
+              --singularity_pull_docker_container  BOOL    Pull Docker containers with Singularity
+                                                           (default: false)
+              --help                                       Show this help message and exit
+
+            Profiles:
+              docker, singularity, podman, conda, standard, test
+
+            Example:
+              nextflow run main.nf \\
+                --assembly assembly.fa.gz \\
+                --reads reads.csv \\
+                --genomad_db /path/to/genomad_db \\
+                --checkv_db /path/to/checkv_db \\
+                --outdir results \\
+                -profile docker
+            """.stripIndent()
+        exit 0
+    }
 
     // 0. Validate inputs
     if (!params.assembly) {
@@ -42,6 +95,12 @@ workflow {
     if (!params.checkv_db) {
         error "Please provide a CheckV database path with --checkv_db"
     }
+    if (!(params.checkv_min_quality in ['all', 'low', 'medium', 'high', 'complete'])) {
+        error "checkv_min_quality must be one of: all, low, medium, high, complete"
+    }
+
+    // Accept both a boolean (config/YAML) and a CLI string
+    def use_minimap = params.minimap?.toString() == 'true'
 
     def assembly_file = file(params.assembly)
     if (!assembly_file.exists()) {
@@ -77,6 +136,8 @@ workflow {
         reads         : ${params.reads}
         genomad_db    : ${params.genomad_db}
         checkv_db     : ${params.checkv_db}
+        checkv_quality: ${params.checkv_min_quality}
+        mapper        : ${use_minimap ? 'minimap2' : 'bwa'}
         outdir        : ${params.outdir}
         """.stripIndent()
 
@@ -98,17 +159,18 @@ workflow {
         checkv_db_dir
     )
 
-    // 4. Dereplicate the viral sequences
+    // 4. Dereplicate the viral sequences with votuderep
     dereplicate_input_ch = GENOMAD_ENDTOEND.out.virus_fasta
         .join(CHECKV_ENDTOEND.out.quality_summary)
 
-    DEREPLICATE(
+    VOTUDEREP(
         dereplicate_input_ch
     )
 
-    // 5. Extract representative sequences
+    // 5. Extract representative sequences and annotate them with CheckV quality
     repseq_input_ch = GENOMAD_ENDTOEND.out.virus_fasta
-        .join(DEREPLICATE.out.representative_ids)
+        .join(VOTUDEREP.out.representative_ids)
+        .join(CHECKV_ENDTOEND.out.quality_summary)
 
     EXTRACT_REPSEQ(
         repseq_input_ch
@@ -128,24 +190,41 @@ workflow {
         }
 
     // 7. Map reads to dereplicated vOTUs
-    mapping_input_ch = reads_ch
-        .combine(EXTRACT_REPSEQ.out.representatives)
+    //    BWA is the default; pass --minimap to use minimap2 instead.
+    if (use_minimap) {
+        mapping_input_ch = reads_ch
+            .combine(EXTRACT_REPSEQ.out.representatives)
 
-    MINIMAP2_ALIGN(
-        mapping_input_ch,
-        true,  // bam_format
-        'bai', // bam_index_extension
-        false, // cigar_paf_format
-        false  // cigar_bam
-    )
+        MINIMAP2_ALIGN(
+            mapping_input_ch,
+            true,  // bam_format
+            'bai', // bam_index_extension
+            false, // cigar_paf_format
+            false  // cigar_bam
+        )
+
+        bam_files_ch   = MINIMAP2_ALIGN.out.bam.map { meta, bam -> bam }.collect()
+        index_files_ch = MINIMAP2_ALIGN.out.index.map { meta, index -> index }.collect()
+    } else {
+        // Build the BWA index once for the dereplicated vOTUs
+        BWA_INDEX(EXTRACT_REPSEQ.out.representatives)
+
+        // first() makes the single index/reference reusable for every sample
+        BWA_MEM(
+            reads_ch,
+            BWA_INDEX.out.index.first(),
+            EXTRACT_REPSEQ.out.representatives.first(),
+            true // sort_bam
+        )
+
+        bam_files_ch   = BWA_MEM.out.bam.map { meta, bam -> bam }.collect()
+        index_files_ch = BWA_MEM.out.csi.map { meta, index -> index }.collect()
+    }
 
     // 8. Calculate coverage metrics across all samples
-    bam_files_ch = MINIMAP2_ALIGN.out.bam.map { meta, bam -> bam }.collect()
-    bai_files_ch = MINIMAP2_ALIGN.out.index.map { meta, bai -> bai }.collect()
-
-    COVERM_CONTIG(
+    BAMCOUNTREFS(
         bam_files_ch,
-        bai_files_ch
+        index_files_ch
     )
 
     onComplete:

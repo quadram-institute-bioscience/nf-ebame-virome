@@ -18,7 +18,6 @@ process GENOMAD_ENDTOEND {
     tuple val(meta), path("genomad-out/*_summary/*_virus_proteins.faa.gz"), emit: virus_proteins
     tuple val(meta), path("genomad-out/*_summary/*_plasmid.fna.gz")       , emit: plasmid_fasta
     tuple val(meta), path("genomad-out/*_summary/*_plasmid_summary.tsv")  , emit: plasmid_summary
-    tuple val(meta), path("genomad-out")                                  , emit: genomad_dir
     path "versions.yml"                                                   , emit: versions
 
     when:
@@ -27,6 +26,8 @@ process GENOMAD_ENDTOEND {
     script:
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
+    // Accept both real booleans (nextflow.config/YAML) and CLI strings
+    def cleanup = params.genomad_cleanup?.toString() == 'true' ? '--cleanup' : ''
     """
     # Decompress input if needed
     if [[ ${fasta} == *.gz ]]; then
@@ -42,6 +43,7 @@ process GENOMAD_ENDTOEND {
         genomad-out \\
         $genomad_db \\
         --threads $task.cpus \\
+        $cleanup \\
         $args
 
     # Compress output files

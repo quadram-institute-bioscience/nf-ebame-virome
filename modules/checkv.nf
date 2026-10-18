@@ -18,7 +18,6 @@ process CHECKV_ENDTOEND {
     tuple val(meta), path("checkv-out/complete_genomes.tsv"), emit: complete_genomes
     tuple val(meta), path("checkv-out/proviruses.fna")      , emit: proviruses
     tuple val(meta), path("checkv-out/viruses.fna")         , emit: viruses
-    tuple val(meta), path("checkv-out")                     , emit: checkv_dir
     path "versions.yml"                                     , emit: versions
 
     when:
@@ -43,6 +42,9 @@ process CHECKV_ENDTOEND {
         -d $db \\
         -t $task.cpus \\
         $args
+
+    # CheckV leaves large intermediate files (proteins, HMMER results) in tmp/
+    rm -rf checkv-out/tmp
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
