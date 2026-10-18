@@ -253,9 +253,8 @@ workflow {
     )
 
     // 9. Re-assess the final dereplicated vOTUs with CheckV.
-    //    Using .first() makes votus_ch a value channel that can be reused
-    //    by both CHECKV_VOTUS and the read-mapping steps below.
-    votus_ch = EXTRACT_REPSEQ.out.representatives.first()
+    //    votus_ch is a value channel (single item) reused by CHECKV_VOTUS and read-mapping.
+    votus_ch = EXTRACT_REPSEQ.out.representatives
 
     CHECKV_VOTUS(votus_ch, checkv_db_dir)
 
@@ -274,7 +273,7 @@ workflow {
         BWA_INDEX(votus_ch)
         BWA_MEM(
             reads_ch,
-            BWA_INDEX.out.index.first(),
+            BWA_INDEX.out.index,
             votus_ch,
             true // sort_bam
         )
