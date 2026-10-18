@@ -12,13 +12,13 @@ process CHECKV_ENDTOEND {
     path db
 
     output:
-    tuple val(meta), path("checkv-out/quality_summary.tsv") , emit: quality_summary
-    tuple val(meta), path("checkv-out/completeness.tsv")    , emit: completeness
-    tuple val(meta), path("checkv-out/contamination.tsv")   , emit: contamination
-    tuple val(meta), path("checkv-out/complete_genomes.tsv"), emit: complete_genomes
-    tuple val(meta), path("checkv-out/proviruses.fna")      , emit: proviruses
-    tuple val(meta), path("checkv-out/viruses.fna")         , emit: viruses
-    path "versions.yml"                                     , emit: versions
+    tuple val(meta), path("checkv-out/*/quality_summary.tsv") , emit: quality_summary
+    tuple val(meta), path("checkv-out/*/completeness.tsv")    , emit: completeness
+    tuple val(meta), path("checkv-out/*/contamination.tsv")   , emit: contamination
+    tuple val(meta), path("checkv-out/*/complete_genomes.tsv"), emit: complete_genomes
+    tuple val(meta), path("checkv-out/*/proviruses.fna")      , emit: proviruses
+    tuple val(meta), path("checkv-out/*/viruses.fna")         , emit: viruses
+    path "versions.yml"                                       , emit: versions
 
     when:
     task.ext.when == null || task.ext.when
@@ -38,13 +38,13 @@ process CHECKV_ENDTOEND {
     checkv \\
         end_to_end \\
         \$INPUT_FILE \\
-        checkv-out \\
+        checkv-out/${prefix} \\
         -d $db \\
         -t $task.cpus \\
         $args
 
     # CheckV leaves large intermediate files (proteins, HMMER results) in tmp/
-    rm -rf checkv-out/tmp
+    rm -rf checkv-out/${prefix}/tmp
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -56,13 +56,13 @@ process CHECKV_ENDTOEND {
     def args = task.ext.args ?: ''
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    mkdir -p checkv-out
-    touch checkv-out/quality_summary.tsv
-    touch checkv-out/completeness.tsv
-    touch checkv-out/contamination.tsv
-    touch checkv-out/complete_genomes.tsv
-    touch checkv-out/proviruses.fna
-    touch checkv-out/viruses.fna
+    mkdir -p checkv-out/${prefix}
+    touch checkv-out/${prefix}/quality_summary.tsv
+    touch checkv-out/${prefix}/completeness.tsv
+    touch checkv-out/${prefix}/contamination.tsv
+    touch checkv-out/${prefix}/complete_genomes.tsv
+    touch checkv-out/${prefix}/proviruses.fna
+    touch checkv-out/${prefix}/viruses.fna
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

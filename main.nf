@@ -12,14 +12,17 @@
 ========================================================================================
 */
 
-include { GENOMAD_ENDTOEND } from './modules/genomad'
-include { CHECKV_ENDTOEND  } from './modules/checkv'
-include { VOTUDEREP       } from './modules/votuderep'
-include { EXTRACT_REPSEQ   } from './modules/repseq'
-include { BWA_INDEX        } from './modules/bwa'
-include { BWA_MEM          } from './modules/bwa'
-include { MINIMAP2_ALIGN   } from './modules/minimap'
-include { BAMCOUNTREFS     } from './modules/bamcountrefs'
+include { MEGAHIT                              } from './modules/megahit'
+include { GENOMAD_ENDTOEND                     } from './modules/genomad'
+include { CHECKV_ENDTOEND                      } from './modules/checkv'
+include { CHECKV_ENDTOEND as CHECKV_VOTUS      } from './modules/checkv'
+include { SEQFU_PREFIX                         } from './modules/seqfu_prefix'
+include { VOTUDEREP                            } from './modules/votuderep'
+include { EXTRACT_REPSEQ                       } from './modules/repseq'
+include { BWA_INDEX                            } from './modules/bwa'
+include { BWA_MEM                              } from './modules/bwa'
+include { MINIMAP2_ALIGN                       } from './modules/minimap'
+include { BAMCOUNTREFS                         } from './modules/bamcountrefs'
 
 /*
 ========================================================================================
@@ -39,15 +42,19 @@ workflow {
             ======================================================
 
             Usage:
-              nextflow run main.nf --assembly <assembly.fa[.gz]> \\
-                                   --reads <reads.csv> \\
+              nextflow run main.nf --reads <reads.csv> \\
                                    --genomad_db <genomad_db> \\
                                    --checkv_db <checkv_db> \\
+                                   [ --assembly <assembly.fa[.gz]> |
+                                     --assemblies <assemblies.csv> ] \\
                                    [options] \\
                                    -profile <docker|singularity|podman|conda|standard>
 
+            Assembly input (choose one, or omit to assemble with MEGAHIT):
+              --assembly   PATH    Single co-assembly FASTA file (optionally gzipped)
+              --assemblies PATH    CSV file with columns: assemblyID, fasta
+
             Required arguments:
-              --assembly   PATH    Co-assembly FASTA file (optionally gzipped)
               --reads      PATH    CSV file with columns: sampleID, reads_R1, reads_R2
               --genomad_db PATH    geNomad database directory
               --checkv_db  PATH    CheckV database directory
@@ -70,7 +77,7 @@ workflow {
             Profiles:
               docker, singularity, podman, conda, standard, test
 
-            Example:
+            Example (single assembly):
               nextflow run main.nf \\
                 --assembly assembly.fa.gz \\
                 --reads reads.csv \\
@@ -78,14 +85,32 @@ workflow {
                 --checkv_db /path/to/checkv_db \\
                 --outdir results \\
                 -profile docker
+
+            Example (multiple assemblies):
+              nextflow run main.nf \\
+                --assemblies assemblies.csv \\
+                --reads reads.csv \\
+                --genomad_db /path/to/genomad_db \\
+                --checkv_db /path/to/checkv_db \\
+                -profile docker
+
+            Example (no assembly — MEGAHIT each sample):
+              nextflow run main.nf \\
+                --reads reads.csv \\
+                --genomad_db /path/to/genomad_db \\
+                --checkv_db /path/to/checkv_db \\
+                -profile docker
             """.stripIndent()
         exit 0
     }
 
     // 0. Validate inputs
-    if (!params.assembly) {
-        error "Please provide an assembly file with --assembly"
+
+    // Assembly modes are mutually exclusive
+    if (params.assembly && params.assemblies) {
+        error "Specify --assembly OR --assemblies, not both"
     }
+
     if (!params.reads) {
         error "Please provide a reads CSV file with --reads"
     }
@@ -99,40 +124,82 @@ workflow {
         error "checkv_min_quality must be one of: all, low, medium, high, complete"
     }
 
-    // Accept both a boolean (config/YAML) and a CLI string
     def use_minimap = params.minimap?.toString() == 'true'
 
-    def assembly_file = file(params.assembly)
-    if (!assembly_file.exists()) {
-        error "Assembly file does not exist: ${params.assembly}"
+    // Validate DB paths (skip in stub-run)
+    def genomad_db_dir = file(params.genomad_db)
+    def checkv_db_dir  = file(params.checkv_db)
+    if (!workflow.stubRun) {
+        if (!genomad_db_dir.isDirectory()) {
+            error "geNomad database directory does not exist: ${params.genomad_db}"
+        }
+        if (!file("${params.genomad_db}/genomad_mini_db.index").exists()) {
+            error "geNomad database index file not found: ${params.genomad_db}/genomad_mini_db.index"
+        }
+        if (!checkv_db_dir.isDirectory()) {
+            error "CheckV database directory does not exist: ${params.checkv_db}"
+        }
+        if (!file("${params.checkv_db}/genome_db").isDirectory()) {
+            error "CheckV database looks incomplete (genome_db/ not found): ${params.checkv_db}"
+        }
     }
 
+    // 1. Parse reads CSV — always needed (MEGAHIT and/or read mapping)
     def reads_csv = file(params.reads)
-    if (!reads_csv.exists()) {
+    if (!workflow.stubRun && !reads_csv.exists()) {
         error "Reads CSV file does not exist: ${params.reads}"
     }
 
-    def genomad_db_dir = file(params.genomad_db)
-    if (!genomad_db_dir.isDirectory()) {
-        error "geNomad database directory does not exist: ${params.genomad_db}"
-    }
-    if (!file("${params.genomad_db}/genomad_mini_db.index").exists()) {
-        error "geNomad database index file not found: ${params.genomad_db}/genomad_mini_db.index"
-    }
+    reads_ch = channel
+        .fromPath(params.reads)
+        .splitCsv(header: true)
+        .map { row ->
+            if (!row.sampleID || !row.reads_R1 || !row.reads_R2) {
+                error "Reads CSV must have non-empty columns sampleID, reads_R1, reads_R2 (problem row: ${row})"
+            }
+            def meta  = [id: row.sampleID]
+            def reads = [file(row.reads_R1, checkIfExists: true), file(row.reads_R2, checkIfExists: true)]
+            return [meta, reads]
+        }
 
-    def checkv_db_dir = file(params.checkv_db)
-    if (!checkv_db_dir.isDirectory()) {
-        error "CheckV database directory does not exist: ${params.checkv_db}"
-    }
-    if (!file("${params.checkv_db}/genome_db").isDirectory()) {
-        error "CheckV database looks incomplete (genome_db/ not found): ${params.checkv_db}"
+    // 2. Build assembly channel — three modes
+    if (params.assembly) {
+        // --- Mode A: single provided assembly ---
+        def assembly_file = file(params.assembly)
+        if (!workflow.stubRun && !assembly_file.exists()) {
+            error "Assembly file does not exist: ${params.assembly}"
+        }
+        assembly_ch = channel.of([[id: assembly_file.simpleName], assembly_file])
+
+    } else if (params.assemblies) {
+        // --- Mode B: multiple provided assemblies (CSV: assemblyID,fasta) ---
+        def assemblies_csv = file(params.assemblies)
+        if (!workflow.stubRun && !assemblies_csv.exists()) {
+            error "Assemblies CSV file does not exist: ${params.assemblies}"
+        }
+        assembly_ch = channel
+            .fromPath(params.assemblies)
+            .splitCsv(header: true)
+            .map { row ->
+                if (!row.assemblyID || !row.fasta) {
+                    error "Assemblies CSV must have non-empty columns assemblyID, fasta (problem row: ${row})"
+                }
+                [[id: row.assemblyID], file(row.fasta, checkIfExists: !workflow.stubRun)]
+            }
+
+    } else {
+        // --- Mode C: no assembly provided — run MEGAHIT on each sample ---
+        MEGAHIT(reads_ch.map { meta, reads -> [meta, reads[0], reads[1]] })
+        assembly_ch = MEGAHIT.out.contigs
     }
 
     log.info """\
         ===================================
         N F V I R   P I P E L I N E
         ===================================
-        assembly      : ${params.assembly}
+        assembly mode : ${ params.assembly   ? "single: ${params.assembly}" :
+                           params.assemblies ? "multi:  ${params.assemblies}" :
+                                              'per-sample (MEGAHIT)' }
         reads         : ${params.reads}
         genomad_db    : ${params.genomad_db}
         checkv_db     : ${params.checkv_db}
@@ -141,91 +208,82 @@ workflow {
         outdir        : ${params.outdir}
         """.stripIndent()
 
-    // 1. Prepare assembly input channel
-    assembly_ch = channel.of([
-        [id: assembly_file.simpleName],
-        assembly_file
-    ])
+    // 3. Run geNomad on every assembly
+    GENOMAD_ENDTOEND(assembly_ch, genomad_db_dir)
 
-    // 2. Run geNomad end-to-end
-    GENOMAD_ENDTOEND(
-        assembly_ch,
-        genomad_db_dir
+    // 4. Run CheckV on each assembly's viral sequences
+    CHECKV_ENDTOEND(GENOMAD_ENDTOEND.out.virus_fasta, checkv_db_dir)
+
+    // 5. Prefix sequence IDs with the assembly ID so IDs are unique after merging.
+    //    Both the FASTA headers and the contig_id column of the quality summary
+    //    receive the same "{assemblyID}_" prefix to keep them in sync.
+    SEQFU_PREFIX(
+        GENOMAD_ENDTOEND.out.virus_fasta
+            .join(CHECKV_ENDTOEND.out.quality_summary)
     )
 
-    // 3. Run CheckV on geNomad virus output
-    CHECKV_ENDTOEND(
-        GENOMAD_ENDTOEND.out.virus_fasta,
-        checkv_db_dir
-    )
+    // 6. Concatenate prefixed FASTAs and quality summaries across all assemblies
+    merged_fasta_ch = SEQFU_PREFIX.out.virus_fasta
+        .map  { meta, fasta -> fasta }
+        .collectFile(name: 'all_viruses.fna', sort: 'deep')
+        .map  { fasta -> [[id: 'merged'], fasta] }
 
-    // 4. Dereplicate the viral sequences with votuderep
-    dereplicate_input_ch = GENOMAD_ENDTOEND.out.virus_fasta
-        .join(CHECKV_ENDTOEND.out.quality_summary)
+    merged_quality_ch = SEQFU_PREFIX.out.quality_summary
+        .map  { meta, tsv -> tsv }
+        .collectFile(name: 'all_quality_summary.tsv', keepHeader: true, skip: 1, sort: 'deep')
+        .map  { tsv -> [[id: 'merged'], tsv] }
 
-    VOTUDEREP(
-        dereplicate_input_ch
-    )
-
-    // 5. Extract representative sequences and annotate them with CheckV quality
-    repseq_input_ch = GENOMAD_ENDTOEND.out.virus_fasta
-        .join(VOTUDEREP.out.representative_ids)
-        .join(CHECKV_ENDTOEND.out.quality_summary)
-
-    EXTRACT_REPSEQ(
-        repseq_input_ch
-    )
-
-    // 6. Parse reads CSV and create channel
-    reads_ch = channel
-        .fromPath(params.reads)
-        .splitCsv(header: true)
-        .map { row ->
-            if (!row.sampleID || !row.reads_R1 || !row.reads_R2) {
-                error "Reads CSV must have non-empty columns sampleID, reads_R1, reads_R2 (problem row: ${row})"
-            }
-            def meta = [id: row.sampleID]
-            def reads = [file(row.reads_R1, checkIfExists: true), file(row.reads_R2, checkIfExists: true)]
-            return [meta, reads]
+    // multiMap lets both VOTUDEREP and EXTRACT_REPSEQ consume the merged channels
+    merged_fasta_ch
+        .join(merged_quality_ch)
+        .multiMap { meta, fasta, tsv ->
+            for_votuderep: [meta, fasta, tsv]
+            for_repseq:    [meta, fasta, tsv]
         }
+        .set { merged }
 
-    // 7. Map reads to dereplicated vOTUs
-    //    BWA is the default; pass --minimap to use minimap2 instead.
+    // 7. Dereplicate across all assemblies into a single vOTU set
+    VOTUDEREP(merged.for_votuderep)
+
+    // 8. Extract and rename representative sequences
+    EXTRACT_REPSEQ(
+        merged.for_repseq
+            .join(VOTUDEREP.out.representative_ids)
+            .map { meta, fasta, tsv, rep_ids -> [meta, fasta, rep_ids, tsv] }
+    )
+
+    // 9. Re-assess the final dereplicated vOTUs with CheckV.
+    //    Using .first() makes votus_ch a value channel that can be reused
+    //    by both CHECKV_VOTUS and the read-mapping steps below.
+    votus_ch = EXTRACT_REPSEQ.out.representatives.first()
+
+    CHECKV_VOTUS(votus_ch, checkv_db_dir)
+
+    // 10. Map reads against the dereplicated vOTUs
     if (use_minimap) {
-        mapping_input_ch = reads_ch
-            .combine(EXTRACT_REPSEQ.out.representatives)
-
         MINIMAP2_ALIGN(
-            mapping_input_ch,
+            reads_ch.combine(votus_ch),
             true,  // bam_format
             'bai', // bam_index_extension
             false, // cigar_paf_format
             false  // cigar_bam
         )
-
-        bam_files_ch   = MINIMAP2_ALIGN.out.bam.map { meta, bam -> bam }.collect()
+        bam_files_ch   = MINIMAP2_ALIGN.out.bam.map   { meta, bam   -> bam   }.collect()
         index_files_ch = MINIMAP2_ALIGN.out.index.map { meta, index -> index }.collect()
     } else {
-        // Build the BWA index once for the dereplicated vOTUs
-        BWA_INDEX(EXTRACT_REPSEQ.out.representatives)
-
-        // first() makes the single index/reference reusable for every sample
+        BWA_INDEX(votus_ch)
         BWA_MEM(
             reads_ch,
             BWA_INDEX.out.index.first(),
-            EXTRACT_REPSEQ.out.representatives.first(),
+            votus_ch,
             true // sort_bam
         )
-
-        bam_files_ch   = BWA_MEM.out.bam.map { meta, bam -> bam }.collect()
+        bam_files_ch   = BWA_MEM.out.bam.map { meta, bam   -> bam   }.collect()
         index_files_ch = BWA_MEM.out.csi.map { meta, index -> index }.collect()
     }
 
-    // 8. Calculate coverage metrics across all samples
-    BAMCOUNTREFS(
-        bam_files_ch,
-        index_files_ch
-    )
+    // 11. Calculate coverage metrics across all samples
+    BAMCOUNTREFS(bam_files_ch, index_files_ch)
 
     onComplete:
     log.info """\

@@ -8,13 +8,19 @@
         "input_output_options": {
             "title": "Input/output options",
             "type": "object",
-            "required": ["assembly", "reads", "genomad_db", "checkv_db"],
+            "required": ["reads", "genomad_db", "checkv_db"],
             "properties": {
                 "assembly": {
                     "type": "string",
                     "format": "file-path",
-                    "description": "Path to the co-assembly FASTA file",
-                    "help_text": "The metagenomic assembly in FASTA format (can be gzipped)"
+                    "description": "Path to a single co-assembly FASTA file (mutually exclusive with --assemblies)",
+                    "help_text": "The metagenomic assembly in FASTA format (can be gzipped). Omit both --assembly and --assemblies to assemble each sample with MEGAHIT."
+                },
+                "assemblies": {
+                    "type": "string",
+                    "format": "file-path",
+                    "description": "Path to a CSV file listing multiple assemblies (mutually exclusive with --assembly)",
+                    "help_text": "CSV with columns: assemblyID, fasta. Each assemblyID is used as a prefix for viral sequence IDs before cross-assembly dereplication."
                 },
                 "reads": {
                     "type": "string",
