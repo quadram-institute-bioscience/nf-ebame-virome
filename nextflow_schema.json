@@ -39,6 +39,12 @@
                     "format": "directory-path",
                     "description": "The output directory where the results will be saved",
                     "default": "./results"
+                },
+                "download_publish_mode": {
+                    "type": "string",
+                    "description": "How downloaded database files are published to --outdir. hardlink requires work and outdir on the same filesystem; symlinks are not supported.",
+                    "default": "move",
+                    "enum": ["move", "copy", "hardlink"]
                 }
             }
         },

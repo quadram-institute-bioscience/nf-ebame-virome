@@ -41,6 +41,14 @@ nextflow run download.nf --outdir db -profile docker
 
 or manually with `genomad download-database .` and `checkv download_database .`.
 
+The download also writes `genomad-versions.yml` and `checkv-versions.yml` to
+`--outdir` so the downloaded tool versions are recorded alongside the databases.
+By default the databases are moved into `--outdir` as real files (not symlinks)
+to avoid duplicating several GB in `work/`. Use `--download_publish_mode copy`
+if you need to keep the task outputs in `work/` for `-resume`.
+The download processes retry up to two times and request at least 2 CPUs / 8 GB,
+scaling resources with each retry.
+
 ## Input
 
 The pipeline requires:
