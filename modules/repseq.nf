@@ -5,7 +5,7 @@ process EXTRACT_REPSEQ {
     conda "bioconda::seqfu=1.22.3"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/seqfu:1.22.3--hfd12232_2':
-        'biocontainers/seqfu:1.22.3--hfd12232_2' }"
+        'quay.io/biocontainers/seqfu:1.22.3--hfd12232_2' }"
 
     input:
     tuple val(meta), path(virus_fasta), path(representative_ids), path(quality_summary)
