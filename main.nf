@@ -284,15 +284,15 @@ workflow {
     // 11. Calculate coverage metrics across all samples
     BAMCOUNTREFS(bam_files_ch, index_files_ch)
 
-}
+    workflow.onComplete {
+        log.info """\
+            ===================================
+            Pipeline completed!
+            Status    : ${workflow.success ? 'SUCCESS' : 'FAILED'}
+            Duration  : ${workflow.duration}
+            Output    : ${params.outdir}
+            ===================================
+            """.stripIndent()
+    }
 
-workflow.onComplete {
-    log.info """\
-        ===================================
-        Pipeline completed!
-        Status    : ${workflow.success ? 'SUCCESS' : 'FAILED'}
-        Duration  : ${workflow.duration}
-        Output    : ${params.outdir}
-        ===================================
-        """.stripIndent()
 }
