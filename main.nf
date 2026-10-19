@@ -284,7 +284,9 @@ workflow {
     // 11. Calculate coverage metrics across all samples
     BAMCOUNTREFS(bam_files_ch, index_files_ch)
 
-    onComplete:
+}
+
+workflow.onComplete {
     log.info """\
         ===================================
         Pipeline completed!
